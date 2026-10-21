@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import semver from 'semver';
 
 import * as api from '@/api/application.ts';
+import { HARDENED } from '@/lib/hardened.ts';
 
 import { CustomServer } from './custom-server.tsx';
 import { Offline } from './offline.tsx';
@@ -89,15 +90,22 @@ export const Update = ({ setIsLocked }: UpdateProps) => {
       <div className="text-base">{t('settings.update.title')}</div>
       <Divider className="opacity-50" />
 
-      <Preview
-        checkForUpdates={checkForUpdates}
-        disabled={isCustomServerEnabled || isCustomServerPending}
-      />
-      <CustomServer
-        checkForUpdates={checkForUpdates}
-        onEnabledChange={setIsCustomServerEnabled}
-        onPendingChange={setIsCustomServerPending}
-      />
+      {!HARDENED && (
+        <>
+          <Preview
+            checkForUpdates={checkForUpdates}
+            disabled={isCustomServerEnabled || isCustomServerPending}
+          />
+          <CustomServer
+            checkForUpdates={checkForUpdates}
+            onEnabledChange={setIsCustomServerEnabled}
+            onPendingChange={setIsCustomServerPending}
+          />
+        </>
+      )}
+      {HARDENED && (
+        <div className="pb-4 text-sm text-neutral-500">{t('settings.update.hardenedTip')}</div>
+      )}
       <Offline
         status={status}
         setStatus={setStatus}
@@ -125,12 +133,18 @@ export const Update = ({ setIsLocked }: UpdateProps) => {
             status="success"
             icon={<SmileOutlined />}
             title={currentVersion}
-            subTitle={t('settings.update.isLatest')}
-            extra={[
-              <Button key="confirm" onClick={checkForUpdates}>
-                {t('settings.update.title')}
-              </Button>
-            ]}
+            subTitle={
+              HARDENED ? t('settings.update.hardenedVersion') : t('settings.update.isLatest')
+            }
+            extra={
+              HARDENED
+                ? []
+                : [
+                    <Button key="confirm" onClick={checkForUpdates}>
+                      {t('settings.update.title')}
+                    </Button>
+                  ]
+            }
           />
         )}
 

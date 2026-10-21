@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"NanoKVM-Server/common"
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/service/controlmode"
 	"NanoKVM-Server/service/hid"
 	"NanoKVM-Server/service/vm"
@@ -48,7 +49,12 @@ func NewService(control *controlmode.Manager) *Service {
 		captureLeaseTimers: make(map[string]*time.Timer),
 	}
 	service.ensureDependencies()
-	service.startRuntimeIntentReconcile()
+	// The hardened build ships no PicoClaw runtime and blocks its model
+	// providers at the firewall, so a saved "running" intent must not try to
+	// bring it back.
+	if !hardened.Enabled {
+		service.startRuntimeIntentReconcile()
+	}
 	return service
 }
 

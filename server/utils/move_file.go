@@ -76,3 +76,32 @@ func MoveFilesRecursively(src, dst string) error {
 		return MoveFile(path, dstName)
 	})
 }
+
+// CopyFile copies src over dst through a temporary file next to dst, so a
+// reader of dst never sees it half written.
+func CopyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = srcFile.Close() }()
+
+	tmp := dst + ".tmp"
+	tmpFile, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err = io.Copy(tmpFile, srcFile); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err = tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}

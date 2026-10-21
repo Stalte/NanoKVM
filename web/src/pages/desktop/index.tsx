@@ -8,6 +8,7 @@ import { useMediaQuery } from 'react-responsive';
 
 import { getInputRegion, setControlRegionMode } from '@/api/vm.ts';
 import { ControlRegionConfig, InputRegion } from '@/types';
+import { HARDENED } from '@/lib/hardened.ts';
 import * as storage from '@/lib/localstorage.ts';
 import { client } from '@/lib/websocket.ts';
 import { picoclawChatOpenAtom } from '@/jotai/picoclaw.ts';
@@ -58,7 +59,8 @@ const Console = () => {
   const { t } = useTranslation();
   const { hasPermission } = useAuth();
   const canControl = hasPermission('console.control');
-  const canAi = hasPermission('ai');
+  // The hardened build ships no PicoClaw runtime.
+  const canAi = hasPermission('ai') && !HARDENED;
   const isBigScreen = useMediaQuery({ minWidth: 850 });
   const [activeVideoMode] = useState(getVideoMode);
   const [picoclawSidebarWidth, setPicoclawSidebarWidth] = useState(420);

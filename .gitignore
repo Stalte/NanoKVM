@@ -38,3 +38,10 @@ kvmapp/kvm_system/kvm_system
 /build/
 kvmapp/server
 kvmapp/version
+
+# Hardened build: fetched and built at package time
+kvmapp/tailscale/
+kvmapp/hardening/nanokvm-guard
+
+# Never commit an update signing private key
+*.key

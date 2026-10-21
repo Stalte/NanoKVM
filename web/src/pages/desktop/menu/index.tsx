@@ -6,6 +6,7 @@ import { useAtomValue } from 'jotai';
 import { GripVerticalIcon } from 'lucide-react';
 import Draggable, { DraggableData, DraggableEvent } from 'react-draggable';
 
+import { HARDENED } from '@/lib/hardened.ts';
 import {
   keyboardLedStatusVisibleAtom,
   menuCloseSignalAtom,
@@ -36,7 +37,8 @@ export const Menu = () => {
   const canLibrary = hasPermission('library.read');
   const canControl = hasPermission('console.control');
   const canTerminal = hasPermission('terminal');
-  const canAi = hasPermission('ai');
+  // The hardened build ships no PicoClaw runtime.
+  const canAi = hasPermission('ai') && !HARDENED;
   const canPower = hasPermission('power');
 
   const menuDisabledItems = useAtomValue(menuDisabledItemsAtom);

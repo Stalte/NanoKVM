@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import * as downloadApi from '@/api/download.ts';
 import { fetchCredentials } from '@/api/media.ts';
 import { formatSize } from '@/lib/format.ts';
+import { HARDENED } from '@/lib/hardened.ts';
 import { getBaseUrl } from '@/lib/service.ts';
 
 type Props = {
@@ -356,14 +357,17 @@ export function useAddMedia({ dataOwned, onChanged, onError }: Props) {
           onClick={() => setIsUploadOpen(true)}
         />
       </Tooltip>
-      <Tooltip title={dataOwned ? t('storage.add.blocked') : t('storage.add.fromUrl')}>
-        <Button
-          size="small"
-          icon={<LinkIcon size={14} />}
-          disabled={dataOwned}
-          onClick={() => setIsUrlOpen(true)}
-        />
-      </Tooltip>
+      {/* The hardened build never fetches images from the internet. */}
+      {!HARDENED && (
+        <Tooltip title={dataOwned ? t('storage.add.blocked') : t('storage.add.fromUrl')}>
+          <Button
+            size="small"
+            icon={<LinkIcon size={14} />}
+            disabled={dataOwned}
+            onClick={() => setIsUrlOpen(true)}
+          />
+        </Tooltip>
+      )}
     </div>
   );
 

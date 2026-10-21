@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	"NanoKVM-Server/common"
 	"NanoKVM-Server/config"
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/logger"
 	"NanoKVM-Server/middleware"
 	"NanoKVM-Server/router"
@@ -35,6 +37,8 @@ func initialize() {
 	}
 
 	logger.Init()
+
+	applyHardening()
 
 	// init screen parameters
 	_ = common.GetScreen()
@@ -131,4 +135,22 @@ func run() {
 func dispose() {
 	diskfs.CleanupStale()
 	common.GetKvmVision().Close()
+}
+
+// applyHardening re-applies the firewall and service lockdown before the
+// server starts listening. The boot scripts already run it, but the first
+// start after an offline update from a stock release comes from the stock
+// S95nanokvm, which knows nothing about it.
+func applyHardening() {
+	if !hardened.Enabled {
+		return
+	}
+	if _, err := os.Stat(hardened.HardeningScript); err != nil {
+		log.Printf("hardening script missing: %v", err)
+		return
+	}
+	out, err := exec.Command(hardened.HardeningScript, "apply").CombinedOutput()
+	if err != nil {
+		log.Printf("hardening failed: %v: %s", err, out)
+	}
 }

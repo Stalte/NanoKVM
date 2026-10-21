@@ -2,6 +2,7 @@ package router
 
 import (
 	"NanoKVM-Server/authn"
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/middleware"
 	"NanoKVM-Server/service/download"
 
@@ -18,9 +19,14 @@ func downloadRouter(r *gin.Engine) {
 	// running, and reading the library is implied by every media grant.
 	read := r.Group("/api").Use(middleware.CheckToken(), middleware.RequirePermission(authn.PermLibraryRead))
 
-	write.POST("/download/image", service.DownloadImage)              // download image
-	write.POST("/download/image/cancel", service.CancelDownloadImage) // cancel image download
-	read.GET("/download/image/status", service.StatusImage)           // download image
-	read.GET("/download/image/enabled", service.ImageEnabled)         // download image
-	write.POST("/download/file", service.DownloadImageFile)           // upload image file
+	read.GET("/download/image/status", service.StatusImage)   // download image
+	read.GET("/download/image/enabled", service.ImageEnabled) // download image
+	write.POST("/download/file", service.DownloadImageFile)   // upload image file
+
+	// Fetching an image from a URL is the device reaching the internet on a
+	// user's behalf; the hardened build only accepts images uploaded to it.
+	if !hardened.Enabled {
+		write.POST("/download/image", service.DownloadImage)              // download image
+		write.POST("/download/image/cancel", service.CancelDownloadImage) // cancel image download
+	}
 }
