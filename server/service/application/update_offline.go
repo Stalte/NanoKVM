@@ -113,6 +113,10 @@ func offlineUpdate(c *gin.Context) error {
 	if err := validateExtractedPackage(sourceDir, expectedVersion); err != nil {
 		return err
 	}
+	if err := verifyPackageSignature(sourceDir, expectedVersion); err != nil {
+		log.Errorf("refusing install package: %v", err)
+		return err
+	}
 	if err := installPreparedPackage(sourceDir); err != nil {
 		log.Errorf("failed to install package: %v", err)
 		return err

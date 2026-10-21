@@ -8,6 +8,7 @@
 #   kvmapp/kvm_system/kvm_system    kvm_system daemon
 #   kvmapp/server/dl_lib/           video libraries, including a fresh libkvm.so
 #   server/NanoKVM-Server           Go server (BoringCrypto, RPATH $ORIGIN/dl_lib)
+#   kvmapp/hardening/nanokvm-guard  static privilege-drop and time-sync helper
 
 set -euo pipefail
 
@@ -78,6 +79,13 @@ cd "$NANOKVM_PATH/server"
 ./build.sh
 echo "::endgroup::"
 
+echo "::group::server: build nanokvm-guard"
+# Pure Go and static, so it needs no libc from the image it runs on.
+CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 \
+    go build -trimpath -ldflags="-s -w" \
+    -o "$NANOKVM_PATH/kvmapp/hardening/nanokvm-guard" ./cmd/nanokvm-guard
+echo "::endgroup::"
+
 # support/sg2002/build reports "Build Error!" without a non-zero exit status for
 # some failure paths, so assert on the artifacts rather than trusting $?.
 echo "[INFO] verifying artifacts"
@@ -85,7 +93,8 @@ missing=0
 for artifact in \
     "$NANOKVM_PATH/kvmapp/kvm_system/kvm_system" \
     "$NANOKVM_PATH/kvmapp/server/dl_lib/libkvm.so" \
-    "$NANOKVM_PATH/server/NanoKVM-Server"
+    "$NANOKVM_PATH/server/NanoKVM-Server" \
+    "$NANOKVM_PATH/kvmapp/hardening/nanokvm-guard"
 do
     if [ -f "$artifact" ]; then
         echo "  ok      ${artifact#$NANOKVM_PATH/}"

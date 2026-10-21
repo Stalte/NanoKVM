@@ -1,6 +1,7 @@
 package tailscale
 
 import (
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/proto"
 	"NanoKVM-Server/utils"
 	"net"
@@ -51,6 +52,13 @@ func (s *Service) Install(c *gin.Context) {
 
 func (s *Service) Uninstall(c *gin.Context) {
 	var rsp proto.Response
+
+	// Tailscale is the hardened build's only way in from outside the LAN, and
+	// harden.sh puts the bundled binaries back on every boot anyway.
+	if hardened.Enabled {
+		rsp.ErrRsp(c, -1, "tailscale cannot be uninstalled from the hardened build")
+		return
+	}
 
 	_ = NewCli().Stop()
 	_ = utils.DelGoMemLimit()

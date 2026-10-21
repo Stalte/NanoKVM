@@ -1,89 +1,92 @@
 #!/bin/sh
+#
+# NanoKVM hardened build: tailscaled as an unprivileged user.
+#
+# tailscaled runs as the "tailscale" user (see /kvmapp/hardening/hardening.conf)
+# in userspace-networking mode, so it needs no root and no TUN device. That
+# user is the only one the firewall lets open connections to the internet.
+# The web UI and SSH reach the tailnet through "tailscale serve", which
+# /kvmapp/hardening/harden.sh sets up once the device is logged in.
 
 DAEMON="tailscaled"
 PIDFILE="/var/run/$DAEMON.pid"
+HARDEN_DIR=/kvmapp/hardening
+GUARD="$HARDEN_DIR/nanokvm-guard"
 
-# Set the port to listen on for incoming VPN packets.
-# Remote nodes will automatically be informed about the new port number,
-# but you might want to configure this in order to set external firewall
-# settings.
-PORT="41641"
+. "$HARDEN_DIR/hardening.conf"
+[ -f /etc/kvm/hardening.conf ] && . /etc/kvm/hardening.conf
+[ -f /boot/hardening.conf ] && . /boot/hardening.conf
 
-# Extra flags you might want to pass to tailscaled.
-FLAGS=""
+[ -x /usr/sbin/$DAEMON ] || { echo "/usr/sbin/$DAEMON not found; run $HARDEN_DIR/harden.sh apply"; exit 1; }
+[ -x /usr/bin/tailscale ] || { echo "/usr/bin/tailscale not found; run $HARDEN_DIR/harden.sh apply"; exit 1; }
+[ -x "$GUARD" ] || { echo "$GUARD not found"; exit 1; }
 
-# You need tailscaled at /usr/sbin to server, and tailscale at /usr/bin to operate
-# STATIC version needed. Download page at https://pkgs.tailscale.com/stable/#static
-PKG_URL_LATEST="https://pkgs.tailscale.com/stable/tailscale_latest_riscv64.tgz"
-[ ! -x /usr/sbin/$DAEMON ] &&
-    echo "/usr/sbin/$DAEMON not found, please download it from $PKG_URL_LATEST" &&
-    echo "Then unpack it, copy $DAEMON to /usr/sbin and copy tailscale to /usr/bin" &&
-    exit 1
-VERSION=$(/usr/sbin/$DAEMON --version|sed -n '1p'|xargs echo -n)
+start() {
+    if [ -f /etc/kvm/GOMEMLIMIT ]; then
+        limit=$(cat /etc/kvm/GOMEMLIMIT)
+        export GOMEMLIMIT="${limit}MiB"
+    else
+        export GOMEMLIMIT=512MiB
+    fi
+    # Never upload logs to log.tailscale.io.
+    export TS_NO_LOGS_NO_SUPPORT=true
 
-[ -x /usr/bin/tailscale ] ||
-    (echo "/usr/bin/tailscale not found, your installation of tailscale may be broken" && exit 1)
+    mkdir -p /var/lib/tailscale /var/run/tailscale
+    chown -R "$TS_UID:$TS_UID" /var/lib/tailscale /var/run/tailscale
+    chmod 700 /var/lib/tailscale
 
-# Clean up old forwarding configuration if it exists
-if [ -f /etc/sysctl.d/99-tailscale.conf ]; then
-    echo "Found old forwarding configuration, cleaning up..."
-    rm -f /etc/sysctl.d/99-tailscale.conf
-    sysctl -w net.ipv4.ip_forward=0 >/dev/null 2>&1
-    sysctl -w net.ipv6.conf.all.forwarding=0 >/dev/null 2>&1
-    echo "Cleanup completed. IPv4/IPv6 forwarding disabled."
+    # The clock is set by harden.sh's keeper as soon as the network is up;
+    # tailscaled retries the control server on its own until then.
 
-    # Trigger IPv6 address renewal on all interfaces
-    for iface in $(ls /sys/class/net/ | grep -v lo); do
-        echo 0 > /proc/sys/net/ipv6/conf/$iface/forwarding 2>/dev/null
-        sysctl -w net.ipv6.conf.$iface.accept_ra=2 >/dev/null 2>&1
-    done
+    if pidof "$DAEMON" >/dev/null 2>&1; then
+        echo "$DAEMON already running"
+        return 0
+    fi
 
-    echo "If you need exit node features, please configure manually."
-fi
+    printf "Starting %s as %s: " "$DAEMON" "$TS_USER"
+    start-stop-daemon -S -b -m -q -p "$PIDFILE" -x "$GUARD" -- \
+        run-as "$TS_USER" -- /usr/sbin/$DAEMON \
+        --tun=userspace-networking \
+        --state=/var/lib/tailscale/tailscaled.state \
+        --statedir=/var/lib/tailscale \
+        --socket=/var/run/tailscale/tailscaled.sock \
+        --port="$TS_PORT" \
+        --no-logs-no-support
+    if [ $? = 0 ]; then
+        echo "OK"
+        # The device manages its own DNS and is never a router for the tailnet.
+        (
+            sleep 5
+            tailscale set --accept-dns=false --accept-routes=false --advertise-exit-node=false --ssh=false
+            "$HARDEN_DIR/harden.sh" serve
+        ) </dev/null >/dev/null 2>&1 &
+    else
+        echo "FAIL"
+    fi
+}
+
+stop() {
+    printf "Stopping %s: " "$DAEMON"
+    start-stop-daemon -K -q -p "$PIDFILE"
+    [ $? = 0 ] && { echo "OK"; rm -f "$PIDFILE"; } || echo "FAIL"
+    killall "$DAEMON" >/dev/null 2>&1
+}
 
 case "$1" in
-        start)
-                if [ -f /etc/kvm/GOMEMLIMIT ]; then
-                     value=$(cat /etc/kvm/GOMEMLIMIT)
-                     export GOMEMLIMIT="${value}MiB"
-                else
-                     export GOMEMLIMIT=512MiB
-                fi
-
-                echo "GOMEMLIMIT set to ${GOMEMLIMIT}"
-
-                # Ensure directories exist
-                mkdir -p /var/lib/tailscale /var/run/tailscale
-
-                printf "Starting $DAEMON[$VERSION]: "
-                start-stop-daemon -S -bmq -p "$PIDFILE" -x "/usr/sbin/$DAEMON" -- \
-                    --state=/var/lib/tailscale/tailscaled.state \
-                    --socket=/var/run/tailscale/tailscaled.sock \
-                    --port=${PORT} \
-                    $FLAGS
-                if [ $? = 0 ]; then
-                    sleep 5
-                    echo "OK"
-                    tailscale set --accept-dns=false
-                else
-                    echo "FAIL"
-                fi
-                ;;
-        stop)
-                printf "Stopping $DAEMON: "
-                start-stop-daemon -K -p "$PIDFILE"
-                [ $? = 0 ]  && (echo "OK"; rm -f "$PIDFILE") || echo "FAIL"
-                printf "cleaning tailscaled: "
-                /usr/sbin/$DAEMON --cleanup >/dev/null 2>&1
-                [ $? = 0 ] && echo "OK" || echo "FAIL"
-                ;;
-        restart|reload)
-                $0 stop
-                $0 start
-                ;;
-        *)
-                echo "Usage: $0 {start|stop|restart}"
-                exit 1
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|reload)
+        stop
+        sleep 1
+        start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
 esac
 
 exit 0

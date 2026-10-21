@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/service/auth"
 	"NanoKVM-Server/service/controlmode"
 	"NanoKVM-Server/service/picoclaw"
@@ -48,7 +49,9 @@ func server(r *gin.Engine) {
 	hidRouter(r)
 	controlRouter(r, control, picoclawService)
 	mcpRouter(r, control, picoclawService)
-	picoclawRouter(r, picoclawService)
+	if !hardened.Enabled {
+		picoclawRouter(r, picoclawService)
+	}
 	wsRouter(r)
 	downloadRouter(r)
 	extensionsRouter(r)

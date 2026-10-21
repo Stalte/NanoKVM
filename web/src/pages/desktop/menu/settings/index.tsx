@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import semver from 'semver';
 
 import * as api from '@/api/application.ts';
+import { HARDENED } from '@/lib/hardened.ts';
 import * as ls from '@/lib/localstorage.ts';
 import { keyboardLockAtom } from '@/jotai/keyboard.ts';
 import { submenuOpenCountAtom } from '@/jotai/settings.ts';
@@ -81,7 +82,7 @@ export const Settings = () => {
   ];
 
   useEffect(() => {
-    if (!canUpdate) return;
+    if (!canUpdate || HARDENED) return;
     const skip = ls.getSkipUpdate();
     if (!skip) {
       checkForUpdates();

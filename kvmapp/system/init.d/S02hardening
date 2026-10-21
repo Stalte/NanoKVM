@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# NanoKVM hardened build: load the firewall before any network interface
+# comes up (S30eth), so there is no window in which the device can reach the
+# internet. The full lockdown runs again from S95nanokvm.
+
+HARDEN=/kvmapp/hardening/harden.sh
+
+case "$1" in
+    start)
+        printf "Applying network lockdown: "
+        if [ -x "$HARDEN" ]; then
+            "$HARDEN" boot >/dev/null 2>&1 && echo "OK" || echo "FAIL"
+        else
+            echo "MISSING"
+        fi
+        ;;
+    stop)
+        ;;
+    restart|reload)
+        "$HARDEN" firewall
+        ;;
+    status)
+        "$HARDEN" status
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+esac
+
+exit 0

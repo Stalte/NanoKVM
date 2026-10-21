@@ -78,9 +78,29 @@ require_file "$ROOT/web/dist/index.html" "run: make web"
 # were optional here, "make package" on its own would quietly ship the stale one.
 require_file "$ROOT/kvmapp/server/dl_lib/libkvm.so" "run: make vision"
 
+# Hardened build: the bundled Tailscale and the helper that runs it.
+require_file "$ROOT/kvmapp/hardening/nanokvm-guard" "run: make release-build"
+require_file "$ROOT/kvmapp/tailscale/tailscaled" "run: scripts/fetch-tailscale.sh"
+require_file "$ROOT/kvmapp/tailscale/tailscale" "run: scripts/fetch-tailscale.sh"
+
 require_riscv64 "$ROOT/server/NanoKVM-Server"
 require_riscv64 "$ROOT/kvmapp/kvm_system/kvm_system"
 require_riscv64 "$ROOT/kvmapp/server/dl_lib/libkvm.so"
+require_riscv64 "$ROOT/kvmapp/hardening/nanokvm-guard"
+require_riscv64 "$ROOT/kvmapp/tailscale/tailscaled"
+require_riscv64 "$ROOT/kvmapp/tailscale/tailscale"
+
+# A hardened release must carry the key its own future updates are checked
+# against; without one the device would accept unsigned packages. Test builds
+# may opt out with ALLOW_UNSIGNED_UPDATES=1.
+if ! ls "$ROOT"/server/pkgsign/keys/*.pub >/dev/null 2>&1; then
+    if [ "${ALLOW_UNSIGNED_UPDATES:-0}" != 1 ]; then
+        echo "[ERROR] no update signing key in server/pkgsign/keys/*.pub" >&2
+        echo "        see docs/HARDENED.md, or set ALLOW_UNSIGNED_UPDATES=1 for a test build" >&2
+        exit 1
+    fi
+    echo "[WARN] no update signing key: this package will accept unsigned offline updates"
+fi
 
 echo "[INFO] staging nanokvm_$VERSION"
 # Clear the whole output directory: release.yml uploads build/release/nanokvm_*
@@ -94,6 +114,11 @@ mkdir -p "$STAGE"
 #    only matters for reading the archive by hand: install.go chmods the whole
 #    tree to 0755 on the device regardless.
 cp -a "$ROOT/kvmapp/." "$STAGE/"
+
+#    Hardened build: nothing that reaches the internet on its own ships.
+#    PicoClaw (cloud LLM agent) and the stock online updater script go.
+rm -rf "$STAGE/picoclaw"
+rm -f "$STAGE/system/init.d/S96picoclaw" "$STAGE/system/update-nanokvm.py"
 
 # 2. Version marker. The updater reads /kvmapp/version to report the currently
 #    installed version (version.go).

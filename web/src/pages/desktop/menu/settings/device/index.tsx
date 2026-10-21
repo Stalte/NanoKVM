@@ -1,6 +1,8 @@
 import { Divider } from 'antd';
 import { useTranslation } from 'react-i18next';
 
+import { HARDENED } from '@/lib/hardened.ts';
+
 import { Advanced } from './advanced';
 import { Hdmi } from './hdmi.tsx';
 import { Mdns } from './mdns.tsx';
@@ -20,7 +22,7 @@ export const Device = () => {
 
       <div className="flex flex-col space-y-8">
         <Ssh />
-        <Mdns />
+        {!HARDENED && <Mdns />}
         <Hdmi />
         <Divider className="opacity-50" />
 

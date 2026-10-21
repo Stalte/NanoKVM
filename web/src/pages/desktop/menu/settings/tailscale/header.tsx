@@ -5,6 +5,7 @@ import { CircleStopIcon, EllipsisIcon, LoaderIcon, RotateCwIcon } from 'lucide-r
 import { useTranslation } from 'react-i18next';
 
 import * as api from '@/api/extensions/tailscale.ts';
+import { HARDENED } from '@/lib/hardened.ts';
 
 import { Memory } from './memory.tsx';
 import { Swap } from './swap.tsx';
@@ -102,7 +103,7 @@ export const Header = ({ state, onSuccess }: HeaderProps) => {
                     <Swap />
                   </>
                 )}
-                <Uninstall onSuccess={onSuccess} />
+                {!HARDENED && <Uninstall onSuccess={onSuccess} />}
               </div>
             }
             placement="bottom"

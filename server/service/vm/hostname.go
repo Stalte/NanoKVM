@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"NanoKVM-Server/proto"
@@ -11,6 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
+
+// A single RFC 1123 label: the value is written into /etc/hosts and read by
+// boot scripts, so anything else (spaces, newlines, dots) is refused.
+var hostnamePattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 
 const (
 	BootHostnameFile = "/boot/hostname"
@@ -24,6 +29,10 @@ func (s *Service) SetHostname(c *gin.Context) {
 
 	if err := proto.ParseFormRequest(c, &req); err != nil {
 		rsp.ErrRsp(c, -1, "invalid arguments")
+		return
+	}
+	if !hostnamePattern.MatchString(req.Hostname) {
+		rsp.ErrRsp(c, -1, "invalid hostname")
 		return
 	}
 

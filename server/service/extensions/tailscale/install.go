@@ -1,6 +1,7 @@
 package tailscale
 
 import (
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/utils"
 	"fmt"
 	"io"
@@ -13,6 +14,10 @@ import (
 const (
 	OriginalURL = "https://pkgs.tailscale.com/stable/tailscale_latest_riscv64.tgz"
 	Workspace   = "/root/.tailscale"
+
+	// BundledDir holds the pinned, checksum-verified Tailscale binaries the
+	// hardened package ships (see scripts/fetch-tailscale.sh).
+	BundledDir = "/kvmapp/tailscale"
 )
 
 func isInstalled() bool {
@@ -23,6 +28,10 @@ func isInstalled() bool {
 }
 
 func install() error {
+	if hardened.Enabled {
+		return installBundled()
+	}
+
 	_ = os.MkdirAll(Workspace, 0o755)
 	defer func() {
 		_ = os.RemoveAll(Workspace)
@@ -115,4 +124,24 @@ func getDownloadURL() (string, error) {
 	}
 
 	return resp.Request.URL.String(), nil
+}
+
+// installBundled copies the binaries shipped inside the package into place
+// instead of downloading whatever pkgs.tailscale.com calls "latest".
+func installBundled() error {
+	for _, pair := range [][2]string{
+		{BundledDir + "/tailscale", TailscalePath},
+		{BundledDir + "/tailscaled", TailscaledPath},
+	} {
+		if err := utils.CopyFile(pair[0], pair[1]); err != nil {
+			log.Errorf("failed to install bundled %s: %s", pair[0], err)
+			return err
+		}
+		if err := os.Chmod(pair[1], 0o755); err != nil {
+			return err
+		}
+	}
+
+	log.Debugf("install bundled tailscale successfully")
+	return nil
 }

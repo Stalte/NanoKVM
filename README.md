@@ -1,5 +1,10 @@
 # NanoKVM
 
+> **Hardened fork.** This repository builds a Tailscale-only NanoKVM package:
+> no online updates, no PicoClaw, no remote downloads, and a default-deny
+> firewall that lets only Tailscale reach the internet. Setup, signing and
+> limits are in [docs/HARDENED.md](docs/HARDENED.md).
+
 <div align="center">
   <br>
   <img src="https://wiki.sipeed.com/hardware/assets/NanoKVM/introduce/NanoKVM_3.png" alt="NanoKVM" style="margin: 20px 0;">

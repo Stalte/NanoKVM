@@ -142,7 +142,9 @@ jobs:
         run: make web
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        # Same-repository pull requests get a token that can read the private
+        # builder image; pull requests from forks still need it to be public.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -202,8 +204,18 @@ jobs:
             DOCKER_TTY= \
             IMAGE_NAME="${{ steps.image.outputs.ref }}"
 
+      - name: Fetch pinned Tailscale
+        run: ./scripts/fetch-tailscale.sh
+
       - name: Assemble package
+        env:
+          # Test builds from pull requests may lack the owner's update signing
+          # key; release builds must carry it (see scripts/package.sh).
+          ALLOW_UNSIGNED_UPDATES: ${{ github.event_name == 'pull_request' && '1' || '0' }}
         run: make package VERSION="${{ steps.version.outputs.version }}"
+
+      - name: Audit package for internet-facing code
+        run: ./scripts/audit-package.sh "build/release/nanokvm_${{ steps.version.outputs.version }}.tar.gz"
 
       - name: Compare against the published release
         # Informational only: highlights what changed relative to what devices
@@ -278,6 +290,8 @@ jobs:
             echo
             if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
               echo "Upload only the inner tarball through NanoKVM's manual offline update UI."
+              echo "Once a hardened build with your key is installed, sign the tarball first:"
+              echo "\`nanokvm-sign sign -key ~/.nanokvm/update.key nanokvm_${VERSION}.tar.gz\`"
             else
               echo "Publishing to \`cdn.sipeed.com/nanokvm/\` is a separate manual step."
             fi
@@ -292,5 +306,52 @@ jobs:
             build/release/latest.json
             build/release/sha256.txt
             build/release/BUILD_INFO.txt
+            build/release/AUDIT.txt
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'pull_request' && 7 || 90 }}
+
+  signer:
+    name: Build nanokvm-sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache: false
+
+      - name: Test signing
+        working-directory: server
+        run: go test ./pkgsign/
+
+      - name: Build for desktop platforms
+        working-directory: server
+        run: |
+          mkdir -p ../build/signer
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            os=${target%/*}
+            arch=${target#*/}
+            ext=""
+            [ "$os" = windows ] && ext=".exe"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
+              go build -trimpath -ldflags="-s -w" \
+              -o "../build/signer/nanokvm-sign-${os}-${arch}${ext}" ./cmd/nanokvm-sign
+          done
+          (cd ../build/signer && sha256sum nanokvm-sign-* > SHA256SUMS)
+          cat ../build/signer/SHA256SUMS
+
+      - name: Upload signer
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanokvm-sign-${{ github.run_id }}
+          path: build/signer/
+          if-no-files-found: error
+          retention-days: 90

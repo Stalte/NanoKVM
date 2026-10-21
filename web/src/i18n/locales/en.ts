@@ -633,6 +633,9 @@ const en = {
       },
       update: {
         title: 'Check for Updates',
+        hardenedTip:
+          'Hardened build: this device never contacts an update server. Upload a package signed with your update key below.',
+        hardenedVersion: 'Installed version. Updates are installed by hand from signed packages.',
         queryFailed: 'Get version failed',
         updateFailed: 'Update failed. Please retry.',
         isLatest: 'You already have the latest version.',

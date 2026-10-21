@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/proto"
 	"NanoKVM-Server/utils"
 
@@ -53,6 +54,16 @@ func (s *Service) GetVersion(c *gin.Context) {
 	}
 
 	log.Debugf("current version: %s", currentVersion)
+
+	// The hardened build never asks an update server what is newest: the
+	// installed version is the only one it knows about.
+	if hardened.Enabled {
+		rsp.OkRspWithData(c, &proto.GetVersionRsp{
+			Current: currentVersion,
+			Latest:  currentVersion,
+		})
+		return
+	}
 
 	// latest version
 	latestVersion := ""

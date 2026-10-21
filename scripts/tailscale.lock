@@ -1,0 +1,6 @@
+# Tailscale bundled into the hardened package. scripts/fetch-tailscale.sh
+# downloads exactly this file and refuses it unless both the hash below and
+# the one pkgs.tailscale.com publishes match. To upgrade, change both lines
+# after checking the new release notes.
+TAILSCALE_VERSION=1.104.2
+TAILSCALE_SHA256=1f8065e0d966a607ec013c31da09ced55943e4de17cd2e520c9cb8e22f6d3f62

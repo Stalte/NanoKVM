@@ -1,0 +1,111 @@
+name: Security Scan
+
+# Dependency and static-analysis scans for the hardened build. Results are
+# written to the job summary and uploaded as an artifact. They do not block a
+# merge: most findings are in upstream dependencies and need a human to judge
+# whether the vulnerable code is reachable on the device.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly, so a newly published advisory against a pinned dependency shows
+    # up even when nothing in the repository changed.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up pnpm
+        run: npm install --global pnpm@11
+
+      - name: Install scanners
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: govulncheck (Go dependencies and standard library)
+        working-directory: server
+        continue-on-error: true
+        run: |
+          mkdir -p ../build/security
+          govulncheck -show verbose ./... | tee ../build/security/govulncheck.txt
+
+      - name: gosec (Go static analysis)
+        working-directory: server
+        continue-on-error: true
+        run: |
+          gosec -quiet -fmt=text -out=../build/security/gosec.txt \
+            -exclude=G115,G301,G302,G304,G306 ./... || true
+          tail -n 40 ../build/security/gosec.txt
+
+      - name: pnpm audit (web UI dependencies)
+        working-directory: web
+        continue-on-error: true
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm audit --prod | tee ../build/security/pnpm-audit.txt
+
+      - name: Secret scan
+        continue-on-error: true
+        run: |
+          # Private signing keys and the usual credential shapes must never be
+          # committed. Public keys under server/pkgsign/keys/ are expected.
+          git grep -nIE 'nanokvm-ed25519-private [A-Za-z0-9+/]{40}|BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|tskey-(auth|api)-[A-Za-z0-9-]+' \
+            -- ':!*.md' ':!.github/workflows/security.yml' \
+            | tee build/security/secrets.txt
+          if [ -s build/security/secrets.txt ]; then
+            echo "::error::possible secret committed; see secrets.txt"
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Security scan"
+            for f in govulncheck pnpm-audit secrets; do
+              echo
+              echo "<details><summary>$f</summary>"
+              echo
+              echo '```text'
+              tail -n 60 "build/security/$f.txt" 2>/dev/null || echo "(no output)"
+              echo '```'
+              echo "</details>"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-${{ github.run_id }}
+          path: build/security/
+          retention-days: 30

@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"NanoKVM-Server/authn"
+	"NanoKVM-Server/hardened"
 	"NanoKVM-Server/middleware"
 	"NanoKVM-Server/service/vm"
 )
@@ -90,9 +91,13 @@ func vmRouter(r *gin.Engine) {
 	base.GET("/vm/web-title", service.GetWebTitle)    // Get web title
 	device.POST("/vm/web-title", service.SetWebTitle) // Set web title
 
-	device.GET("/vm/mdns", service.GetMdnsState)         // get mDNS state
-	device.POST("/vm/mdns/enable", service.EnableMdns)   // enable mDNS
-	device.POST("/vm/mdns/disable", service.DisableMdns) // disable mDNS
+	// mDNS announces the device to the whole LAN; the hardened build keeps
+	// Avahi off and does not offer to turn it back on.
+	if !hardened.Enabled {
+		device.GET("/vm/mdns", service.GetMdnsState)         // get mDNS state
+		device.POST("/vm/mdns/enable", service.EnableMdns)   // enable mDNS
+		device.POST("/vm/mdns/disable", service.DisableMdns) // disable mDNS
+	}
 
 	network.POST("/vm/tls", service.SetTls) // enable/disable TLS
 
