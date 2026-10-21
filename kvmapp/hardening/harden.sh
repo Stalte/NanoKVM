@@ -107,6 +107,10 @@ ipv4_rules() {
     echo "-A OUTPUT -m state --state INVALID -j DROP"
     echo "-A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
     echo "-A OUTPUT -o eth0 -p udp --sport 68 --dport 67 -j ACCEPT"
+    # kvm_system pings the gateway to show link state on the OLED.
+    for net in $LAN_SUBNETS; do
+        echo "-A OUTPUT -o eth0 -d $net -p icmp --icmp-type echo-request -j ACCEPT"
+    done
     if [ "$EGRESS" = owner ]; then
         echo "-A OUTPUT -m owner --uid-owner $TS_UID -j ACCEPT"
     else
